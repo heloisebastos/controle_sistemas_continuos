@@ -1,88 +1,76 @@
 #include <PID_v1.h>
 
-// Variáveis globais
-volatile float rev = 0; 
-double rpm, setpoint = 1000; // Valor desejado de RPM
-double input, output;
-unsigned long oldtime = 0;
-unsigned long time;
-int numPas = 9;
-#define coolerPin 9
-#define sensorPin 2
+// Variáveis do estado do sensor de RPM
+int estadoAtual = 0;
+int estadoAnterior = 0;
+unsigned long tempoAnterior = 0;
+unsigned long tempoAtual = 0;
+unsigned long tempoDeGiro = 0;
+float RPM = 0;
+int cont1 = 0;
 
-// Parâmetros PID
-double Kp = 1.0, Ki = 0.2, Kd = 0.1;
+// Variáveis de controle PID
+double Setpoint, Input, Output;
+double Kp = 0.5, Ki = 0.1 , Kd = 0;  // Constantes PID
+PID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
 
-// Criação do objeto PID
-PID myPID(&input, &output, &setpoint, Kp, Ki, Kd, DIRECT);
-
-void isr() {
-  rev++;
-}
+// Variável de controle do cooler (PWM)
+const int pinCooler = 9; // Pino de controle PWM do cooler
 
 void setup() {
   Serial.begin(9600);
-  pinMode(coolerPin, OUTPUT);
-  analogWrite(coolerPin, 255);
+  pinMode(2, INPUT_PULLUP); // Sensor de RPM
+  pinMode(pinCooler, OUTPUT); // Pino do cooler como saída
 
-  attachInterrupt(digitalPinToInterrupt(sensorPin), isr, RISING);
-
-  oldtime = millis();
+  
+  
+  tempoAnterior = micros();
 
   // Inicializa o PID
-  myPID.SetMode(AUTOMATIC);
-  myPID.SetOutputLimits(0, 255);  // Limita a saída para PWM (0 a 255)
-
-  Serial.println("Entre com o valor desejado de RPM.");
+  Setpoint = 70; // Valor alvo de RPM, inicialmente 0
+  myPID.SetMode(AUTOMATIC); // Modo automático do PID
+  myPID.SetOutputLimits(0, 255); // Limite do PWM (0-255)
 }
 
 void loop() {
-  time = millis() - oldtime;
-
-  // Verifica se há dados disponíveis na porta serial
-  if (Serial.available() > 0) {
-    // Lê os dados da serial
-    String inputString = Serial.readStringUntil('\n');
-    double newSetpoint = inputString.toDouble();
-
-    // Define limites para o RPM
-    if (newSetpoint >= 500 && newSetpoint <= 3000) { // Ajuste os limites conforme necessário
-      setpoint = newSetpoint;
-      Serial.print("Novo setpoint (RPM): ");
-      Serial.println(setpoint);
-    } else {
-      Serial.println("Valor de RPM fora do intervalo permitido (500-3000).");
+  // Leitura do sensor de RPM
+  estadoAtual = digitalRead(2);
+  if (estadoAtual != estadoAnterior) {
+    delayMicroseconds(1000); // Debounce
+    if (estadoAtual == HIGH) {
+      tempoAtual = micros();
+      tempoDeGiro = tempoAtual - tempoAnterior;
+      RPM = (float) (60000000 / tempoDeGiro) / 9; // Cálculo de RPM
+      tempoAnterior = tempoAtual;
     }
   }
+  estadoAnterior = estadoAtual;
 
-  if (rev >= numPas) {
-    detachInterrupt(digitalPinToInterrupt(sensorPin));
-
-    float rotations = rev / numPas;
-    rpm = (rotations * 60000) / time;
-    rev = 0;
-    oldtime = millis();
-
-    // Atualiza o valor de entrada do PID
-    input = rpm;
-
-    // Calcula o novo valor de saída (PWM)
-    myPID.Compute();
-
-    // Aplica o valor de saída ao cooler
-    analogWrite(coolerPin, constrain(output, 0, 255)); // Constrange o valor de saída entre 0 e 255
-    
-
-    // Imprime dados para depuração
-    Serial.print("Time (ms): ");
-    Serial.println(time);
-    Serial.print("RPM: ");
-    Serial.println(rpm);
-    Serial.print("Output PWM: ");
-    Serial.println(output);
-
-    attachInterrupt(digitalPinToInterrupt(sensorPin), isr, RISING);
+  // Leitura do valor alvo de RPM pelo monitor serial
+  if (Serial.available() > 0) {
+    String inputString = Serial.readStringUntil('\n');
+    Setpoint = inputString.toFloat(); // Converte para número o valor de RPM alvo
+    Serial.print("RPM Alvo Atualizado: ");
+    Serial.println(Setpoint);
   }
 
-  delay(1000); // Aumenta o delay para evitar sobrecarga e permitir mais estabilidade
+  // Atualiza o valor de entrada para o PID
+  Input = RPM;
+
+  // Calcula o PID
+  myPID.Compute();
+
+  // Atualiza a velocidade do cooler com o valor calculado pelo PID usando analogWrite
+  analogWrite(pinCooler, (int)Output);  // Converte a saída do PID para PWM (0-255)
+
+  // Envia dados no formato CSV para o monitor serial
+  if(cont1 == 3000){
+    Serial.print(RPM);
+    Serial.print(",");
+    Serial.println(Output);
+    cont1 = 0;
+  } else {
+    cont1++;
+  }
+  delayMicroseconds(1000);  // Pequeno delay para não sobrecarregar a serial
 }
