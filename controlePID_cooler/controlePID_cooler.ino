@@ -4,85 +4,108 @@
 volatile float rev = 0; 
 double rpm, setpoint = 1000; // Valor desejado de RPM
 double input, output;
-unsigned long oldtime = 0;
-unsigned long time;
-int numPas = 9;
+unsigned long previousMillis = 0; // Tempo anterior para cálculo do RPM
+unsigned long serialMillis = 0; // Tempo anterior para enviar dados pela Serial
+unsigned long currentMillis; // Tempo atual
+int numPas = 9; // Número de pás do ventilador
 #define coolerPin 9
 #define sensorPin 2
 
-// Parâmetros PID
-double Kp = 1.0, Ki = 0.2, Kd = 0.1;
+// Parâmetros PID ajustados
+double Kp = 0.9, Ki = 0.02, Kd = 0.1; // Ajuste os valores conforme necessário
 
 // Criação do objeto PID
 PID myPID(&input, &output, &setpoint, Kp, Ki, Kd, DIRECT);
 
+#define NUM_READINGS 10
+float readings[NUM_READINGS]; // Array para armazenar as leituras
+int readIndex = 0;
+float total = 0;
+float average = 0;
+
+volatile bool lastState = LOW; // Armazena o estado anterior do sensor
+
 void isr() {
-  rev++;
+  bool currentState = digitalRead(sensorPin); // Lê o estado atual do pino
+
+  // Verifica se houve uma transição de LOW para HIGH
+  if (lastState == LOW && currentState == HIGH) {
+    rev++; // Incrementa a contagem de pás detectadas
+  }
+
+  lastState = currentState; // Atualiza o estado anterior
 }
 
 void setup() {
   Serial.begin(9600);
+  Serial.println("Iniciando..."); // Mensagem inicial para verificação
   pinMode(coolerPin, OUTPUT);
-  analogWrite(coolerPin, 255);
-
-  attachInterrupt(digitalPinToInterrupt(sensorPin), isr, RISING);
-
-  oldtime = millis();
+  pinMode(sensorPin, INPUT);
 
   // Inicializa o PID
   myPID.SetMode(AUTOMATIC);
   myPID.SetOutputLimits(0, 255);  // Limita a saída para PWM (0 a 255)
 
-  Serial.println("Entre com o valor desejado de RPM.");
+  // Configura interrupção
+  attachInterrupt(digitalPinToInterrupt(sensorPin), isr, RISING);
+
+  // Inicializa o array de leituras
+  for (int i = 0; i < NUM_READINGS; i++) {
+    readings[i] = 0;
+  }
 }
 
 void loop() {
-  time = millis() - oldtime;
+  currentMillis = millis(); // Atualiza o tempo atual
 
-  // Verifica se há dados disponíveis na porta serial
   if (Serial.available() > 0) {
     // Lê os dados da serial
     String inputString = Serial.readStringUntil('\n');
     double newSetpoint = inputString.toDouble();
-
-    // Define limites para o RPM
-    if (newSetpoint >= 500 && newSetpoint <= 3000) { // Ajuste os limites conforme necessário
-      setpoint = newSetpoint;
-      Serial.print("Novo setpoint (RPM): ");
-      Serial.println(setpoint);
-    } else {
-      Serial.println("Valor de RPM fora do intervalo permitido (500-3000).");
-    }
+    setpoint = newSetpoint;
+    Serial.print("Novo setpoint (RPM): ");
+    Serial.println(setpoint);
   }
 
-  if (rev >= numPas) {
-    detachInterrupt(digitalPinToInterrupt(sensorPin));
-
+  // Calcula RPM a cada 200ms
+  if (currentMillis - previousMillis >= 200) {
     float rotations = rev / numPas;
-    rpm = (rotations * 60000) / time;
-    rev = 0;
-    oldtime = millis();
+    rpm = (rotations * 600); // Calcula RPM
 
-    // Atualiza o valor de entrada do PID
-    input = rpm;
+    // Atualiza a média móvel
+    total = total - readings[readIndex];
+    readings[readIndex] = rpm;
+    total = total + readings[readIndex];
+    readIndex = (readIndex + 1) % NUM_READINGS;
+    average = total / NUM_READINGS;
 
-    // Calcula o novo valor de saída (PWM)
-    myPID.Compute();
-
-    // Aplica o valor de saída ao cooler
-    analogWrite(coolerPin, constrain(output, 0, 255)); // Constrange o valor de saída entre 0 e 255
-    
-
-    // Imprime dados para depuração
-    Serial.print("Time (ms): ");
-    Serial.println(time);
-    Serial.print("RPM: ");
-    Serial.println(rpm);
-    Serial.print("Output PWM: ");
-    Serial.println(output);
-
-    attachInterrupt(digitalPinToInterrupt(sensorPin), isr, RISING);
+    rev = 0; // Reseta contador de revoluções
+    previousMillis = currentMillis; // Atualiza o tempo anterior
   }
 
-  delay(1000); // Aumenta o delay para evitar sobrecarga e permitir mais estabilidade
+  // Atualiza o valor de entrada do PID
+  input = average;
+
+  myPID.Compute(); // Calcula a saída PID
+
+  // Aplicar faixa de histerese
+  if (output > 10) {
+    output = output; // Se a saída for maior que o limiar, mantenha-a
+  } else {
+    output = 10; // Caso contrário, defina o PWM para o mínimo permitido
+  }
+
+  // Aplica o valor de saída ao cooler
+  analogWrite(coolerPin, constrain(output, 0, 255));
+
+  // Envia dados para a serial a cada 100ms
+  if (currentMillis - serialMillis >= 100) {
+    serialMillis = currentMillis;
+    Serial.print("Setpoint: ");
+    Serial.print(setpoint);
+    Serial.print(" RPM: ");
+    Serial.print(average);
+    Serial.print(" Output PWM: ");
+    Serial.println(output);
+  }
 }
