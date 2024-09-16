@@ -10,15 +10,22 @@ unsigned long currentMillis; // Tempo atual
 int numPas = 9; // Número de pás do ventilador
 #define coolerPin 9
 #define sensorPin 2
-
-// Parâmetros PID
-double Kp = 0.4, Ki = 0.3, Kd = 0; // Ajuste os valores conforme necessário
+int aux = 100;
+// Parâmetros PID ajustados
+double Kp = 0.4, Ki = 0.02, Kd = 0.1; // Ajuste os valores conforme necessário
 
 // Criação do objeto PID
 PID myPID(&input, &output, &setpoint, Kp, Ki, Kd, DIRECT);
 
+#define NUM_READINGS 10
+float readings[NUM_READINGS]; // Array para armazenar as leituras
+int readIndex = 0;
+float total = 0;
+float average = 0;
+
 volatile bool lastState = LOW; // Armazena o estado anterior do sensor
 
+//funcao interrupcao
 void isr() {
   bool currentState = digitalRead(sensorPin); // Lê o estado atual do pino
 
@@ -42,7 +49,10 @@ void setup() {
   // Configura interrupção
   attachInterrupt(digitalPinToInterrupt(sensorPin), isr, RISING);
 
-  previousMillis = millis(); // Inicializa o tempo anterior
+  // Inicializa o array de leituras
+  for (int i = 0; i < NUM_READINGS; i++) {
+    readings[i] = 0;
+  }
 }
 
 void loop() {
@@ -62,14 +72,30 @@ void loop() {
     float rotations = rev / numPas;
     rpm = (rotations * 600); // Calcula RPM
 
+    // Atualiza a média móvel
+    total = total - readings[readIndex];
+    readings[readIndex] = rpm;
+    total = total + readings[readIndex];
+    readIndex = (readIndex + 1) % NUM_READINGS;
+    average = total / NUM_READINGS;
+
     rev = 0; // Reseta contador de revoluções
     previousMillis = currentMillis; // Atualiza o tempo anterior
   }
 
   // Atualiza o valor de entrada do PID
-  input = rpm;
+  input = average;
 
   myPID.Compute(); // Calcula a saída PID
+
+  // Aplicar faixa de histerese
+  if (output > 10) {
+    output = output; 
+  } else {
+    output = 10; 
+  }
+
+
 
   // Aplica o valor de saída ao cooler
   analogWrite(coolerPin, constrain(output, 0, 255));
@@ -77,11 +103,15 @@ void loop() {
   // Envia dados para a serial a cada 100ms
   if (currentMillis - serialMillis >= 100) {
     serialMillis = currentMillis;
-    Serial.print("Setpoint: ");
-    Serial.print(setpoint);
-    Serial.print(" RPM: ");
-    Serial.print(rpm);
-    Serial.print(" Output PWM: ");
-    Serial.println(output);
+    
+    //Serial.print(setpoint);
+   
+    //Serial.print(" RPM: ");
+    Serial.print(average);
+    Serial.print(",");
+    Serial.print(output);
+    Serial.print(",");
+    Serial.println(setpoint);
+    
   }
 }
