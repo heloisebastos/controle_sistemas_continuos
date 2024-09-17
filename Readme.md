@@ -1,4 +1,4 @@
-# Controle do RPM do Cooler com Controle PID
+# Controle do RPM do Cooler utilizando Controle PID
 
 ## Objetivo
 
