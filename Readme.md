@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-O objetivo deste projeto é controlar a velocidade de um cooler utilizando a técnica de modulação por largura de pulso (PWM), combinada com um controle PID(Proporcional-Integral-Derivativo). Através do ajuste do ciclo de trabalho do PWM, é possível controlar a quantidade de energia entregue ao cooler, variando sua velocidade de rotação. Além disso, o controlador PID é utilizado para ajustar automaticamente a velocidade do cooler com base em uma referência desejada, permitindo um controle preciso, eficiente e estável da rotação.
+O objetivo deste projeto é controlar o valor de RPM de um cooler utilizando a técnica de controle PID, garantindo que o ventilador mantenha uma rotação estável conforme o valor definido pelo usuário. O sistema ajusta o comportamento do cooler, corrigindo a diferença entre o RPM desejado e o medido, utilizando um sensor para monitorar a rotação e PWM para aplicar as correções necessárias. O projeto também permite a configuração do setpoint e o monitoramento dos resultados em tempo real via comunicação serial.
 
 ![circuito](imagens/circuito_do_projeto.jpeg)
 
