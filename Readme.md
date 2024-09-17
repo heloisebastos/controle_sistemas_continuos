@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-O objetivo deste projeto é controlar o valor de RPM de um cooler utilizando a técnica de controle PID, garantindo que o ventilador mantenha uma rotação estável conforme o valor definido pelo usuário. O sistema ajusta o comportamento do cooler, corrigindo a diferença entre o RPM desejado e o medido, utilizando um sensor para monitorar a rotação e PWM para aplicar as correções necessárias. O projeto também permite a configuração do setpoint e o monitoramento dos resultados em tempo real via comunicação serial.
+O objetivo deste projeto é controlar o valor de RPM de um cooler utilizando a técnica de controle PID(Proporcional-Integrativo-Derivativo), garantindo que o ventilador mantenha uma rotação estável conforme o valor definido pelo usuário. O sistema ajusta o comportamento do cooler, corrigindo a diferença entre o RPM desejado e o medido, utilizando um sensor para monitorar a rotação e PWM para aplicar as correções necessárias. O projeto também permite a configuração do setpoint e o monitoramento dos resultados em tempo real via comunicação serial.
 
 ![circuito](imagens/circuito_do_projeto.jpeg)
 
