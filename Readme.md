@@ -1,4 +1,4 @@
-# Controle da Velocidade do Cooler com PWM
+# Controle do RPM por meio do controlador PID
 
 ## Objetivo
 
